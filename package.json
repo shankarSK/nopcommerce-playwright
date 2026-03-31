@@ -1,0 +1,28 @@
+{
+  "name": "nopcommerce-playwright",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/mcp": "^0.0.68",
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0",
+    "playwright": "^1.58.2",
+    "playwright-mcp": "^0.0.19",
+    "typescript": "^6.0.2"
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "playwright-core": "^1.58.2",
+    "undici-types": "^7.18.2"
+  },
+  "description": ""
+}
