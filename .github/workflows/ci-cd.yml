@@ -42,77 +42,45 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      - name: Wait for SQL Server to be ready
+      - name: Wait for SQL Server and restore database
         run: |
           echo "Waiting for SQL Server on port 1433..."
           for i in {1..40}; do
             if bash -c 'echo > /dev/tcp/localhost/1433' 2>/dev/null; then
               echo "✓ SQL Server port is open"
               sleep 5
-              exit 0
+              break
             fi
             echo "Attempt $i/40 - waiting..."
             sleep 3
           done
-          echo "✗ SQL Server never became available"
-          exit 1
 
-      - name: Wait for nopCommerce install page
-        run: |
-          echo "Waiting for nopCommerce install page to respond..."
-          for i in {1..60}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/install 2>/dev/null || echo "000")
-            if [ "$STATUS" = "200" ]; then
-              echo "✓ Install page is up"
-              exit 0
-            fi
-            echo "Attempt $i/60 - HTTP: $STATUS - waiting..."
-            sleep 3
-          done
-          echo "✗ Install page never became available"
-          exit 1
+          echo "Copying backup into SQL Server container..."
+          MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
+          echo "Container: $MSSQL_CONTAINER"
+          docker exec "$MSSQL_CONTAINER" mkdir -p /var/opt/mssql/backup
+          docker cp nopcommerce.bak "$MSSQL_CONTAINER:/var/opt/mssql/backup/nopcommerce.bak"
 
-      - name: Install nopCommerce
-        run: |
-          INSTALL_HTML=$(curl -sc /tmp/nop.cookies --max-time 15 http://localhost:8080/install -s)
-          TOKEN=$(echo "$INSTALL_HTML" | grep -o 'name="__RequestVerificationToken"[^>]*value="[^"]*"' | grep -o 'value="[^"]*"' | head -1 | sed 's/value="//;s/"//')
-          if [ -z "$TOKEN" ]; then
-            TOKEN=$(echo "$INSTALL_HTML" | grep -o '__RequestVerificationToken.*value="[^"]*"' | grep -o 'value="[^"]*"' | head -1 | sed 's/value="//;s/"//')
-          fi
-          echo "CSRF token: $([ -n "$TOKEN" ] && echo "found (${#TOKEN} chars)" || echo "NOT FOUND")"
-
-          HTTP_CODE=$(curl -sb /tmp/nop.cookies -c /tmp/nop.cookies \
-            -X POST http://localhost:8080/install \
-            --data-urlencode "__RequestVerificationToken=$TOKEN" \
-            --data-urlencode "AdminEmail=admin@test.com" \
-            --data-urlencode "AdminPassword=Admin@1234" \
-            --data-urlencode "ConfirmPassword=Admin@1234" \
-            --data-urlencode "DataProvider=sqlserver" \
-            --data-urlencode "ServerName=nopcommerce_mssql_server,1433" \
-            --data-urlencode "DatabaseName=nopcommerce" \
-            --data-urlencode "Username=sa" \
-            --data-urlencode "Password=nopCommerce_db_password" \
-            --data-urlencode "IntegratedSecurity=false" \
-            --data-urlencode "CreateDatabaseIfNotExists=true" \
-            --data-urlencode "InstallSampleData=true" \
-            -s -o /tmp/install_response.html -w "%{http_code}")
-          echo "Install POST HTTP status: $HTTP_CODE"
-          grep -i "error\|exception\|message-error" /tmp/install_response.html | head -5 || true
+          echo "Restoring database..."
+          docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "nopCommerce_db_password" -No \
+            -Q "RESTORE DATABASE [nopCommerce_db] FROM DISK='/var/opt/mssql/backup/nopcommerce.bak' WITH REPLACE, RECOVERY"
+          echo "✓ Database restored"
 
       - name: Wait for nopCommerce to be ready
         run: |
-          echo "Waiting for installation to complete..."
-          for i in {1..120}; do
+          echo "Waiting for nopCommerce to be ready..."
+          for i in {1..60}; do
             if curl -sL --max-time 10 http://localhost:8080/login 2>/dev/null | grep -q 'login-button'; then
               echo "✓ nopCommerce is ready!"
               exit 0
             fi
             DEST=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 5 http://localhost:8080/login 2>/dev/null)
-            echo "Attempt $i/120 - redirected to: $DEST - still waiting..."
+            echo "Attempt $i/60 - $DEST - waiting..."
             sleep 3
           done
-          echo "✗ Installation timed out — last response:"
-          curl -sL http://localhost:8080/login | head -60 || true
+          echo "✗ nopCommerce did not become ready — last response:"
+          curl -sL http://localhost:8080/login | head -40 || true
           exit 1
 
       - name: Run tests
