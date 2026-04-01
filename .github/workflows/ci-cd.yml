@@ -71,22 +71,24 @@ jobs:
           NOP_CONTAINER=$(docker ps --filter "ancestor=shankarask/nopcommerce-e2e:latest" --format "{{.Names}}" | head -1)
           echo "nopCommerce container: $NOP_CONTAINER"
           docker restart "$NOP_CONTAINER"
+          sleep 10
           echo "✓ nopCommerce restarted"
 
       - name: Wait for nopCommerce to be ready
         run: |
           echo "Waiting for nopCommerce to be ready..."
           for i in {1..60}; do
-            if curl -sL --max-time 10 http://localhost:8080/login 2>/dev/null | grep -q 'login-button'; then
+            BODY=$(curl -sL --max-time 10 http://localhost:8080/login 2>/dev/null || true)
+            if echo "$BODY" | grep -q 'login-button'; then
               echo "✓ nopCommerce is ready!"
               exit 0
             fi
-            DEST=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 5 http://localhost:8080/login 2>/dev/null)
+            DEST=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 5 http://localhost:8080/login 2>/dev/null || true)
             echo "Attempt $i/60 - $DEST - waiting..."
             sleep 3
           done
           echo "✗ nopCommerce did not become ready — last response:"
-          curl -sL http://localhost:8080/login | head -40 || true
+          curl -sL http://localhost:8080/login 2>/dev/null | head -40 || true
           exit 1
 
       - name: Run tests
