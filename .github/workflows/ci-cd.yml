@@ -36,20 +36,27 @@ jobs:
 
       - name: Wait for nopCommerce to be ready
         run: |
-          echo "Waiting for nopCommerce login page to be ready on http://localhost:8080..."
+          echo "Waiting for nopCommerce to be fully installed and ready..."
           for i in {1..120}; do
             BODY=$(curl -s -L --max-time 10 http://localhost:8080/login 2>/dev/null)
-            if echo "$BODY" | grep -qi 'input.*name.*Email\|name="Email"'; then
-              echo "✓ nopCommerce is ready! (login form found)"
+            if echo "$BODY" | grep -q 'login-button'; then
+              echo "✓ nopCommerce is ready! (login page confirmed)"
               exit 0
             fi
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/login 2>/dev/null || echo "000")
-            echo "Attempt $i/120 - HTTP: $STATUS - login form not yet available, waiting..."
+            echo "Attempt $i/120 - HTTP: $STATUS - waiting..."
             sleep 3
           done
-          echo "✗ nopCommerce failed to start"
-          curl -sL http://localhost:8080/login | head -50 || true
+          echo "✗ nopCommerce failed to start — last response:"
+          curl -sL http://localhost:8080/login | head -80 || true
           exit 1
+
+      - name: Warm up nopCommerce pages
+        run: |
+          curl -sL --max-time 15 http://localhost:8080/ > /dev/null
+          curl -sL --max-time 15 http://localhost:8080/login > /dev/null
+          curl -sL --max-time 15 http://localhost:8080/contactus > /dev/null
+          echo "Warm-up complete"
 
       - name: Run tests
         run: npm run test
