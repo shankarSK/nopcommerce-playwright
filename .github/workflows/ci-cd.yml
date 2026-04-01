@@ -72,6 +72,11 @@ jobs:
           echo "✗ Install page never became available"
           exit 1
 
+      - name: Dump install form fields
+        run: |
+          echo "=== All input/select field names on install page ==="
+          curl -s --max-time 15 http://localhost:8080/install | grep -oE 'name="[^"]+"' | sort -u
+
       - name: Install nopCommerce
         run: |
           INSTALL_HTML=$(curl -sc /tmp/nop.cookies --max-time 15 http://localhost:8080/install -s)
