@@ -34,20 +34,29 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
+      - name: Diagnose nopCommerce startup
+        run: |
+          echo "--- Diagnosing what nopCommerce is serving ---"
+          FINAL_URL=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 10 http://localhost:8080/login 2>/dev/null)
+          echo "Final URL after redirect: $FINAL_URL"
+          echo "--- First 60 lines of response ---"
+          curl -sL --max-time 10 http://localhost:8080/login 2>/dev/null | head -60 || true
+
       - name: Wait for nopCommerce to be ready
         run: |
           echo "Waiting for nopCommerce to be fully installed and ready..."
           for i in {1..120}; do
             BODY=$(curl -s -L --max-time 10 http://localhost:8080/login 2>/dev/null)
+            FINAL_URL=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 5 http://localhost:8080/login 2>/dev/null)
             if echo "$BODY" | grep -q 'login-button'; then
               echo "✓ nopCommerce is ready! (login page confirmed)"
               exit 0
             fi
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/login 2>/dev/null || echo "000")
-            echo "Attempt $i/120 - HTTP: $STATUS - waiting..."
+            echo "Attempt $i/120 - redirected to: $FINAL_URL - login-button not found, waiting..."
             sleep 3
           done
-          echo "✗ nopCommerce failed to start — last response:"
+          echo "✗ nopCommerce failed — final redirect destination:"
+          curl -s -L -o /dev/null -w "%{url_effective}" --max-time 10 http://localhost:8080/login || true
           curl -sL http://localhost:8080/login | head -80 || true
           exit 1
 
