@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     name: Test
     services:
+      nopcommerce_mssql_server:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        ports:
+          - 1433:1433
+        env:
+          SA_PASSWORD: nopCommerce_db_password
+          ACCEPT_EULA: Y
+          MSSQL_PID: Express
       nopcommerce:
         image: shankarask/nopcommerce-e2e:latest
         ports:
@@ -34,38 +42,58 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      - name: Diagnose nopCommerce startup
+      - name: Wait for nopCommerce install page
         run: |
-          echo "--- Diagnosing what nopCommerce is serving ---"
-          FINAL_URL=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 10 http://localhost:8080/login 2>/dev/null)
-          echo "Final URL after redirect: $FINAL_URL"
-          echo "--- First 60 lines of response ---"
-          curl -sL --max-time 10 http://localhost:8080/login 2>/dev/null | head -60 || true
+          echo "Waiting for nopCommerce install page to respond..."
+          for i in {1..60}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/install 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✓ Install page is up"
+              exit 0
+            fi
+            echo "Attempt $i/60 - HTTP: $STATUS - waiting..."
+            sleep 3
+          done
+          echo "✗ Install page never became available"
+          exit 1
+
+      - name: Install nopCommerce
+        run: |
+          echo "Submitting nopCommerce install form (SQL Server + sample data)..."
+          INSTALL_HTML=$(curl -sc /tmp/nop.cookies --max-time 15 http://localhost:8080/install -s)
+          TOKEN=$(echo "$INSTALL_HTML" | grep -o 'name="__RequestVerificationToken"[^>]*value="[^"]*"' | grep -o 'value="[^"]*"' | head -1 | sed 's/value="//;s/"//')
+          if [ -z "$TOKEN" ]; then
+            TOKEN=$(echo "$INSTALL_HTML" | grep -o '__RequestVerificationToken.*value="[^"]*"' | grep -o 'value="[^"]*"' | head -1 | sed 's/value="//;s/"//')
+          fi
+          echo "CSRF token: $([ -n "$TOKEN" ] && echo "found (${#TOKEN} chars)" || echo "NOT FOUND")"
+          HTTP_CODE=$(curl -sb /tmp/nop.cookies -c /tmp/nop.cookies \
+            -X POST http://localhost:8080/install \
+            --data-urlencode "__RequestVerificationToken=$TOKEN" \
+            --data-urlencode "AdminEmail=admin@test.com" \
+            --data-urlencode "AdminPassword=Admin@1234" \
+            --data-urlencode "ConfirmPassword=Admin@1234" \
+            --data-urlencode "DataProvider=sqlserver" \
+            --data-urlencode "ConnectionString=Data Source=nopcommerce_mssql_server,1433;Initial Catalog=nopcommerce;User ID=sa;Password=nopCommerce_db_password;TrustServerCertificate=True;" \
+            --data-urlencode "InstallSampleData=true" \
+            -s -o /tmp/install_response.html -w "%{http_code}")
+          echo "Install POST HTTP status: $HTTP_CODE"
+          grep -i "error\|exception\|not supported\|invalid" /tmp/install_response.html | head -10 || true
 
       - name: Wait for nopCommerce to be ready
         run: |
-          echo "Waiting for nopCommerce to be fully installed and ready..."
+          echo "Waiting for installation to complete..."
           for i in {1..120}; do
-            BODY=$(curl -s -L --max-time 10 http://localhost:8080/login 2>/dev/null)
-            FINAL_URL=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 5 http://localhost:8080/login 2>/dev/null)
-            if echo "$BODY" | grep -q 'login-button'; then
-              echo "✓ nopCommerce is ready! (login page confirmed)"
+            if curl -sL --max-time 10 http://localhost:8080/login 2>/dev/null | grep -q 'login-button'; then
+              echo "✓ nopCommerce is ready!"
               exit 0
             fi
-            echo "Attempt $i/120 - redirected to: $FINAL_URL - login-button not found, waiting..."
+            DEST=$(curl -s -L -o /dev/null -w "%{url_effective}" --max-time 5 http://localhost:8080/login 2>/dev/null)
+            echo "Attempt $i/120 - redirected to: $DEST - still waiting..."
             sleep 3
           done
-          echo "✗ nopCommerce failed — final redirect destination:"
-          curl -s -L -o /dev/null -w "%{url_effective}" --max-time 10 http://localhost:8080/login || true
-          curl -sL http://localhost:8080/login | head -80 || true
+          echo "✗ Installation timed out — last response:"
+          curl -sL http://localhost:8080/login | head -60 || true
           exit 1
-
-      - name: Warm up nopCommerce pages
-        run: |
-          curl -sL --max-time 15 http://localhost:8080/ > /dev/null
-          curl -sL --max-time 15 http://localhost:8080/login > /dev/null
-          curl -sL --max-time 15 http://localhost:8080/contactus > /dev/null
-          echo "Warm-up complete"
 
       - name: Run tests
         run: npm run test
