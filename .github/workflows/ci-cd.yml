@@ -88,7 +88,8 @@ jobs:
             --data-urlencode "AdminPassword=Admin@1234" \
             --data-urlencode "ConfirmPassword=Admin@1234" \
             --data-urlencode "DataProvider=sqlserver" \
-            --data-urlencode "ConnectionString=Data Source=nopcommerce_mssql_server,1433;Initial Catalog=nopcommerce;User ID=sa;Password=nopCommerce_db_password;TrustServerCertificate=True;" \
+            --data-urlencode "SqlConnectionInfo=sqlConnectionString" \
+            --data-urlencode "SqlConnectionString=Data Source=nopcommerce_mssql_server,1433;Initial Catalog=nopcommerce;User ID=sa;Password=nopCommerce_db_password;TrustServerCertificate=True;" \
             --data-urlencode "InstallSampleData=true" \
             -s -o /tmp/install_response.html -w "%{http_code}")
           echo "Install POST HTTP status: $HTTP_CODE"
