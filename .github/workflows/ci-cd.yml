@@ -67,6 +67,12 @@ jobs:
             -Q "RESTORE DATABASE [nopCommerce_db] FROM DISK='/var/opt/mssql/backup/nopcommerce.bak' WITH REPLACE, RECOVERY"
           echo "✓ Database restored"
 
+          echo "Restarting nopCommerce so it picks up the restored database..."
+          NOP_CONTAINER=$(docker ps --filter "ancestor=shankarask/nopcommerce-e2e:latest" --format "{{.Names}}" | head -1)
+          echo "nopCommerce container: $NOP_CONTAINER"
+          docker restart "$NOP_CONTAINER"
+          echo "✓ nopCommerce restarted"
+
       - name: Wait for nopCommerce to be ready
         run: |
           echo "Waiting for nopCommerce to be ready..."
