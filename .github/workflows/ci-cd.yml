@@ -36,19 +36,19 @@ jobs:
 
       - name: Wait for nopCommerce to be ready
         run: |
-          echo "Waiting for nopCommerce to respond on http://localhost:8080..."
+          echo "Waiting for nopCommerce login page to be ready on http://localhost:8080..."
           for i in {1..120}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/ 2>/dev/null || echo "000")
-            if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "302" ]; then
-              echo "✓ nopCommerce is ready! (HTTP $STATUS)"
-              sleep 3
+            BODY=$(curl -s -L --max-time 10 http://localhost:8080/login 2>/dev/null)
+            if echo "$BODY" | grep -qi 'input.*name.*Email\|name="Email"'; then
+              echo "✓ nopCommerce is ready! (login form found)"
               exit 0
             fi
-            echo "Attempt $i/120 - HTTP status: $STATUS - waiting..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/login 2>/dev/null || echo "000")
+            echo "Attempt $i/120 - HTTP: $STATUS - login form not yet available, waiting..."
             sleep 3
           done
           echo "✗ nopCommerce failed to start"
-          curl -v http://localhost:8080/ || true
+          curl -sL http://localhost:8080/login | head -50 || true
           exit 1
 
       - name: Run tests
