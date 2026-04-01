@@ -37,16 +37,18 @@ jobs:
       - name: Wait for nopCommerce to be ready
         run: |
           echo "Waiting for nopCommerce to respond on http://localhost:8080..."
-          for i in {1..90}; do
-            if curl -s http://localhost:8080/ | grep -q "html\|<!DOCTYPE"; then
-              echo "✓ nopCommerce is ready!"
-              sleep 5
+          for i in {1..120}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8080/ 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "302" ]; then
+              echo "✓ nopCommerce is ready! (HTTP $STATUS)"
+              sleep 3
               exit 0
             fi
-            echo "Attempt $i/90 - waiting..."
-            sleep 2
+            echo "Attempt $i/120 - HTTP status: $STATUS - waiting..."
+            sleep 3
           done
           echo "✗ nopCommerce failed to start"
+          curl -v http://localhost:8080/ || true
           exit 1
 
       - name: Run tests
