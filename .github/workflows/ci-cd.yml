@@ -16,7 +16,7 @@ jobs:
     name: Test
     services:
       nopcommerce:
-        image: nopcommerce-e2e-nopcommerce_web:latest
+        image: shankarask/nopcommerce-e2e:latest
         options: >-
           --health-cmd "curl -f http://localhost:80/health || exit 1"
           --health-interval 10s
