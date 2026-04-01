@@ -72,11 +72,6 @@ jobs:
           echo "✗ Install page never became available"
           exit 1
 
-      - name: Dump install form fields
-        run: |
-          echo "=== All input/select field names on install page ==="
-          curl -s --max-time 15 http://localhost:8080/install | grep -oE 'name="[^"]+"' | sort -u
-
       - name: Install nopCommerce
         run: |
           INSTALL_HTML=$(curl -sc /tmp/nop.cookies --max-time 15 http://localhost:8080/install -s)
@@ -93,8 +88,12 @@ jobs:
             --data-urlencode "AdminPassword=Admin@1234" \
             --data-urlencode "ConfirmPassword=Admin@1234" \
             --data-urlencode "DataProvider=sqlserver" \
-            --data-urlencode "SqlConnectionInfo=sqlConnectionString" \
-            --data-urlencode "SqlConnectionString=Data Source=nopcommerce_mssql_server,1433;Initial Catalog=nopcommerce;User ID=sa;Password=nopCommerce_db_password;TrustServerCertificate=True;" \
+            --data-urlencode "ServerName=nopcommerce_mssql_server,1433" \
+            --data-urlencode "DatabaseName=nopcommerce" \
+            --data-urlencode "Username=sa" \
+            --data-urlencode "Password=nopCommerce_db_password" \
+            --data-urlencode "IntegratedSecurity=false" \
+            --data-urlencode "CreateDatabaseIfNotExists=true" \
             --data-urlencode "InstallSampleData=true" \
             -s -o /tmp/install_response.html -w "%{http_code}")
           echo "Install POST HTTP status: $HTTP_CODE"
