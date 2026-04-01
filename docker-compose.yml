@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nopcommerce-playwright
+    environment:
+      - NODE_ENV=test
+    volumes:
+      - ./tests:/app/tests
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report
+    command: npm run test
+    networks:
+      - playwright-network
+
+  # Optional: Add a service for the application under test if needed
+  # nopcommerce:
+  #   image: your-nopcommerce-image:latest
+  #   ports:
+  #     - "80:80"
+  #   networks:
+  #     - playwright-network
+
+networks:
+  playwright-network:
+    driver: bridge
