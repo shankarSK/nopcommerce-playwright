@@ -68,60 +68,52 @@ jobs:
           MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
           echo "MSSQL container: $MSSQL_CONTAINER"
 
-          echo "--- All Docker networks ---"
-          docker network ls
-
           # Get the GitHub Actions network (exclude default bridge/host/none)
           NETWORK=$(docker network ls --format "{{.Name}}" | grep -Ev '^(bridge|host|none)$' | head -1)
-          echo "Joining Docker network: $NETWORK"
+          echo "Docker network: $NETWORK"
 
-          # Use the MSSQL container IP directly to avoid DNS resolution issues
-          MSSQL_IP=$(docker inspect "$MSSQL_CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' | awk '{print $1}')
-          echo "MSSQL IP: $MSSQL_IP"
+          # Get MSSQL IP on this specific network
+          MSSQL_IP=$(docker inspect "$MSSQL_CONTAINER" --format "{{(index .NetworkSettings.Networks \"${NETWORK}\").IPAddress}}")
+          echo "MSSQL IP on network: $MSSQL_IP"
 
-          printf '{"DataProvider":"sqlserver","ConnectionString":"Server=%s,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' \
-            "$MSSQL_IP" > /tmp/dataSettings.json
-          echo "--- dataSettings.json on runner ---"
-          cat /tmp/dataSettings.json
+          echo "--- Image volumes ---"
+          docker inspect shankarask/nopcommerce-e2e:latest --format '{{json .Config.Volumes}}'
 
-          # Start without config first so the container filesystem is initialised
+          # Build the JSON and base64-encode it to safely pass as env var
+          DS_JSON=$(printf '{"DataProvider":"sqlserver","ConnectionString":"Server=%s,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' "$MSSQL_IP")
+          DS_B64=$(printf '%s' "$DS_JSON" | base64 -w 0)
+          echo "Connection string targets: $MSSQL_IP:1433"
+
+          # Override entrypoint: write dataSettings.json BEFORE dotnet starts,
+          # bypassing any volume re-initialisation on restart
           docker run -d \
             --name nopcommerce_web \
             --network "$NETWORK" \
             -p 8080:80 \
-            shankarask/nopcommerce-e2e:latest
+            -e "DS_B64=$DS_B64" \
+            --entrypoint /bin/sh \
+            shankarask/nopcommerce-e2e:latest \
+            -c 'mkdir -p /app/App_Data && echo "$DS_B64" | base64 -d > /app/App_Data/dataSettings.json && exec dotnet /app/Nop.Web.dll'
 
-          echo "Waiting 10s for container to initialise..."
-          sleep 10
+          echo "Waiting 15s for nopCommerce to initialise..."
+          sleep 15
 
           echo "--- Container status ---"
           docker ps --filter "name=nopcommerce_web"
 
-          # Copy dataSettings.json into the running container, then restart
-          docker exec nopcommerce_web mkdir -p /app/App_Data
-          docker cp /tmp/dataSettings.json nopcommerce_web:/app/App_Data/dataSettings.json
-
-          echo "--- Verify file inside container ---"
+          echo "--- Verify dataSettings.json inside container ---"
           docker exec nopcommerce_web cat /app/App_Data/dataSettings.json
-
-          echo "Restarting nopCommerce..."
-          docker restart nopcommerce_web
-
-          echo "--- Container status after restart ---"
-          docker ps --filter "name=nopcommerce_web"
-
-          sleep 8
-
-          echo "--- nopCommerce container logs after restart ---"
-          docker logs nopcommerce_web --tail 40
 
           echo "--- App_Data directory listing ---"
           docker exec nopcommerce_web ls -la /app/App_Data/
 
-          echo "--- Test SQL connectivity from nopCommerce container ---"
-          docker exec nopcommerce_web bash -c "timeout 5 bash -c 'echo > /dev/tcp/nopcommerce_mssql_server/1433' 2>&1 && echo 'SQL Server reachable' || echo 'SQL Server NOT reachable'"
+          echo "--- appsettings.json content (runtime config) ---"
+          docker exec nopcommerce_web cat /app/App_Data/appsettings.json 2>/dev/null || echo "(not yet created)"
 
-          echo "✓ nopCommerce restarted with database config"
+          echo "--- nopCommerce container logs ---"
+          docker logs nopcommerce_web --tail 40
+
+          echo "✓ nopCommerce started"
 
       - name: Wait for nopCommerce to be ready
         run: |
