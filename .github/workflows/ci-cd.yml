@@ -66,19 +66,31 @@ jobs:
       - name: Start nopCommerce
         run: |
           MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
-          NETWORK=$(docker inspect "$MSSQL_CONTAINER" --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
+
+          # Get the GitHub Actions network (exclude default bridge/host/none)
+          NETWORK=$(docker network ls --format "{{.Name}}" | grep -Ev '^(bridge|host|none)$' | head -1)
           echo "Joining Docker network: $NETWORK"
 
           printf '{"DataProvider":"sqlserver","ConnectionString":"Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' \
             > /tmp/dataSettings.json
 
+          # Start without config first so the container filesystem is initialised
           docker run -d \
             --name nopcommerce_web \
             --network "$NETWORK" \
             -p 8080:80 \
-            -v /tmp/dataSettings.json:/app/App_Data/dataSettings.json \
             shankarask/nopcommerce-e2e:latest
-          echo "✓ nopCommerce started"
+
+          sleep 5
+
+          # Copy dataSettings.json into the running container, then restart
+          # (volume mount is avoided: Docker creates a directory when the target path doesn't exist in the image)
+          docker exec nopcommerce_web mkdir -p /app/App_Data
+          docker cp /tmp/dataSettings.json nopcommerce_web:/app/App_Data/dataSettings.json
+          echo "✓ dataSettings.json copied"
+
+          docker restart nopcommerce_web
+          echo "✓ nopCommerce restarted with database config"
 
       - name: Wait for nopCommerce to be ready
         run: |
