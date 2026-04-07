@@ -83,12 +83,14 @@ jobs:
           docker inspect shankarask/nopcommerce-e2e:latest --format '{{json .Config.Volumes}}'
 
           # Build the JSON and base64-encode it to safely pass as env var
-          DS_JSON=$(printf '{"DataProvider":"sqlserver","ConnectionString":"Server=%s,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' "$MSSQL_IP")
+          # Encrypt=False avoids TLS handshake issues with SQL Server 2019
+          DS_JSON=$(printf '{"DataProvider":"sqlserver","ConnectionString":"Server=%s,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Encrypt=False;","SQLCommandTimeout":null,"RawDataSettings":{}}' "$MSSQL_IP")
           DS_B64=$(printf '%s' "$DS_JSON" | base64 -w 0)
           echo "Connection string targets: $MSSQL_IP:1433"
+          echo "JSON (runner): $DS_JSON"
 
-          # Override entrypoint: write dataSettings.json BEFORE dotnet starts,
-          # bypassing any volume re-initialisation on restart
+          # Override entrypoint: write dataSettings.json BEFORE dotnet starts.
+          # Entrypoint output (before exec) appears in docker logs.
           docker run -d \
             --name nopcommerce_web \
             --network "$NETWORK" \
@@ -96,7 +98,7 @@ jobs:
             -e "DS_B64=$DS_B64" \
             --entrypoint /bin/sh \
             shankarask/nopcommerce-e2e:latest \
-            -c 'mkdir -p /app/App_Data && echo "$DS_B64" | base64 -d > /app/App_Data/dataSettings.json && exec dotnet /app/Nop.Web.dll'
+            -c 'mkdir -p /app/App_Data && echo "$DS_B64" | base64 -d > /app/App_Data/dataSettings.json && echo "=== dataSettings.json written ===" && cat /app/App_Data/dataSettings.json && echo "=== App_Data at startup ===" && ls /app/App_Data/ && exec dotnet /app/Nop.Web.dll'
 
           echo "Waiting 15s for nopCommerce to initialise..."
           sleep 15
@@ -104,17 +106,17 @@ jobs:
           echo "--- Container status ---"
           docker ps --filter "name=nopcommerce_web"
 
+          echo "--- Container logs (includes sh output before exec) ---"
+          docker logs nopcommerce_web --tail 60
+
           echo "--- Verify dataSettings.json inside container ---"
-          docker exec nopcommerce_web cat /app/App_Data/dataSettings.json
+          docker exec nopcommerce_web cat /app/App_Data/dataSettings.json 2>&1 || echo "FILE NOT FOUND"
 
           echo "--- App_Data directory listing ---"
-          docker exec nopcommerce_web ls -la /app/App_Data/
+          docker exec nopcommerce_web ls -la /app/App_Data/ 2>&1 || echo "FAILED"
 
           echo "--- appsettings.json content (runtime config) ---"
-          docker exec nopcommerce_web cat /app/App_Data/appsettings.json 2>/dev/null || echo "(not yet created)"
-
-          echo "--- nopCommerce container logs ---"
-          docker logs nopcommerce_web --tail 40
+          docker exec nopcommerce_web cat /app/App_Data/appsettings.json 2>/dev/null || echo "(not created)"
 
           echo "✓ nopCommerce started"
 
