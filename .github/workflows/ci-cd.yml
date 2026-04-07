@@ -63,6 +63,27 @@ jobs:
             -Q "RESTORE DATABASE [nopCommerce_db] FROM DISK='/var/opt/mssql/backup/nopcommerce.bak' WITH REPLACE, RECOVERY"
           echo "✓ Database restored"
 
+          echo "Configuring shipping settings..."
+          docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "nopCommerce_db_password" -No -d nopCommerce_db \
+            -Q "
+              UPDATE Setting SET Value='True'
+                WHERE Name='fixedbyweightbytotalsettings.shippingbyweightbytotalenabled';
+
+              IF NOT EXISTS (SELECT 1 FROM ShippingByWeightByTotalRecord)
+              BEGIN
+                INSERT INTO ShippingByWeightByTotalRecord
+                  (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
+                   PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
+                   Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
+                VALUES
+                  (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,1,NULL),
+                  (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,2,NULL),
+                  (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,3,NULL)
+              END
+            "
+          echo "✓ Shipping configured"
+
       - name: Start nopCommerce
         run: |
           MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
