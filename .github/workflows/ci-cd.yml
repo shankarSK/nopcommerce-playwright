@@ -75,8 +75,12 @@ jobs:
           NETWORK=$(docker network ls --format "{{.Name}}" | grep -Ev '^(bridge|host|none)$' | head -1)
           echo "Joining Docker network: $NETWORK"
 
-          printf '{"DataProvider":"sqlserver","ConnectionString":"Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' \
-            > /tmp/dataSettings.json
+          # Use the MSSQL container IP directly to avoid DNS resolution issues
+          MSSQL_IP=$(docker inspect "$MSSQL_CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' | awk '{print $1}')
+          echo "MSSQL IP: $MSSQL_IP"
+
+          printf '{"DataProvider":"sqlserver","ConnectionString":"Server=%s,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' \
+            "$MSSQL_IP" > /tmp/dataSettings.json
           echo "--- dataSettings.json on runner ---"
           cat /tmp/dataSettings.json
 
@@ -105,6 +109,18 @@ jobs:
 
           echo "--- Container status after restart ---"
           docker ps --filter "name=nopcommerce_web"
+
+          sleep 8
+
+          echo "--- nopCommerce container logs after restart ---"
+          docker logs nopcommerce_web --tail 40
+
+          echo "--- App_Data directory listing ---"
+          docker exec nopcommerce_web ls -la /app/App_Data/
+
+          echo "--- Test SQL connectivity from nopCommerce container ---"
+          docker exec nopcommerce_web bash -c "timeout 5 bash -c 'echo > /dev/tcp/nopcommerce_mssql_server/1433' 2>&1 && echo 'SQL Server reachable' || echo 'SQL Server NOT reachable'"
+
           echo "✓ nopCommerce restarted with database config"
 
       - name: Wait for nopCommerce to be ready
