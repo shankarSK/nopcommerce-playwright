@@ -70,15 +70,16 @@ jobs:
           echo "Injecting dataSettings.json into nopCommerce container..."
           NOP_CONTAINER=$(docker ps --filter "ancestor=shankarask/nopcommerce-e2e:latest" --format "{{.Names}}" | head -1)
           echo "nopCommerce container: $NOP_CONTAINER"
-          docker exec "$NOP_CONTAINER" mkdir -p /app/App_Data
-          docker exec "$NOP_CONTAINER" sh -c 'cat > /app/App_Data/dataSettings.json << '\''EOF'\''
+          cat > /tmp/dataSettings.json <<'EOF'
 {
   "DataProvider": "sqlserver",
   "ConnectionString": "Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;",
   "SQLCommandTimeout": null,
   "RawDataSettings": {}
 }
-EOF'
+EOF
+          docker exec "$NOP_CONTAINER" mkdir -p /app/App_Data
+          docker cp /tmp/dataSettings.json "$NOP_CONTAINER:/app/App_Data/dataSettings.json"
           echo "✓ dataSettings.json written"
 
           echo "Restarting nopCommerce so it picks up the restored database..."
