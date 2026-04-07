@@ -66,6 +66,10 @@ jobs:
       - name: Start nopCommerce
         run: |
           MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
+          echo "MSSQL container: $MSSQL_CONTAINER"
+
+          echo "--- All Docker networks ---"
+          docker network ls
 
           # Get the GitHub Actions network (exclude default bridge/host/none)
           NETWORK=$(docker network ls --format "{{.Name}}" | grep -Ev '^(bridge|host|none)$' | head -1)
@@ -73,6 +77,8 @@ jobs:
 
           printf '{"DataProvider":"sqlserver","ConnectionString":"Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' \
             > /tmp/dataSettings.json
+          echo "--- dataSettings.json on runner ---"
+          cat /tmp/dataSettings.json
 
           # Start without config first so the container filesystem is initialised
           docker run -d \
@@ -81,15 +87,24 @@ jobs:
             -p 8080:80 \
             shankarask/nopcommerce-e2e:latest
 
-          sleep 5
+          echo "Waiting 10s for container to initialise..."
+          sleep 10
+
+          echo "--- Container status ---"
+          docker ps --filter "name=nopcommerce_web"
 
           # Copy dataSettings.json into the running container, then restart
-          # (volume mount is avoided: Docker creates a directory when the target path doesn't exist in the image)
           docker exec nopcommerce_web mkdir -p /app/App_Data
           docker cp /tmp/dataSettings.json nopcommerce_web:/app/App_Data/dataSettings.json
-          echo "✓ dataSettings.json copied"
 
+          echo "--- Verify file inside container ---"
+          docker exec nopcommerce_web cat /app/App_Data/dataSettings.json
+
+          echo "Restarting nopCommerce..."
           docker restart nopcommerce_web
+
+          echo "--- Container status after restart ---"
+          docker ps --filter "name=nopcommerce_web"
           echo "✓ nopCommerce restarted with database config"
 
       - name: Wait for nopCommerce to be ready
@@ -106,7 +121,9 @@ jobs:
             sleep 3
           done
           echo "✗ nopCommerce did not become ready — last response:"
-          curl -sL http://localhost:8080/login 2>/dev/null | head -40 || true
+          curl -sL http://localhost:8080/login 2>/dev/null | grep -o '.\{0,300\}' | head -5 || true
+          echo "--- Container logs ---"
+          docker logs nopcommerce_web --tail 50 || true
           exit 1
 
       - name: Run tests
