@@ -23,10 +23,7 @@ jobs:
           SA_PASSWORD: nopCommerce_db_password
           ACCEPT_EULA: Y
           MSSQL_PID: Express
-      nopcommerce:
-        image: shankarask/nopcommerce-e2e:latest
-        ports:
-          - 8080:80
+
     steps:
       - uses: actions/checkout@v4
 
@@ -55,30 +52,33 @@ jobs:
             sleep 3
           done
 
-          echo "Copying backup into SQL Server container..."
           MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
-          echo "Container: $MSSQL_CONTAINER"
+          echo "SQL Server container: $MSSQL_CONTAINER"
+
           docker exec "$MSSQL_CONTAINER" mkdir -p /var/opt/mssql/backup
           docker cp nopcommerce.bak "$MSSQL_CONTAINER:/var/opt/mssql/backup/nopcommerce.bak"
 
-          echo "Restoring database..."
           docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
             -S localhost -U sa -P "nopCommerce_db_password" -No \
             -Q "RESTORE DATABASE [nopCommerce_db] FROM DISK='/var/opt/mssql/backup/nopcommerce.bak' WITH REPLACE, RECOVERY"
           echo "✓ Database restored"
 
-          echo "Injecting dataSettings.json into nopCommerce container..."
-          NOP_CONTAINER=$(docker ps --filter "ancestor=shankarask/nopcommerce-e2e:latest" --format "{{.Names}}" | head -1)
-          echo "nopCommerce container: $NOP_CONTAINER"
-          printf '{"DataProvider":"sqlserver","ConnectionString":"Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' > /tmp/dataSettings.json
-          docker exec "$NOP_CONTAINER" mkdir -p /app/App_Data
-          docker cp /tmp/dataSettings.json "$NOP_CONTAINER:/app/App_Data/dataSettings.json"
-          echo "✓ dataSettings.json written"
+      - name: Start nopCommerce
+        run: |
+          MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
+          NETWORK=$(docker inspect "$MSSQL_CONTAINER" --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
+          echo "Joining Docker network: $NETWORK"
 
-          echo "Restarting nopCommerce so it picks up the restored database..."
-          docker restart "$NOP_CONTAINER"
-          sleep 10
-          echo "✓ nopCommerce restarted"
+          printf '{"DataProvider":"sqlserver","ConnectionString":"Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;","SQLCommandTimeout":null,"RawDataSettings":{}}' \
+            > /tmp/dataSettings.json
+
+          docker run -d \
+            --name nopcommerce_web \
+            --network "$NETWORK" \
+            -p 8080:80 \
+            -v /tmp/dataSettings.json:/app/App_Data/dataSettings.json \
+            shankarask/nopcommerce-e2e:latest
+          echo "✓ nopCommerce started"
 
       - name: Wait for nopCommerce to be ready
         run: |
@@ -145,7 +145,7 @@ jobs:
         run: npm ci
 
       - name: Build application
-        run: npm run build 2>/dev/null || echo "No build script defined"
+        run: npm run build || echo "No build script defined"
 
   deploy:
     runs-on: ubuntu-latest
