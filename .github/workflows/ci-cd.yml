@@ -76,6 +76,9 @@ jobs:
           MSSQL_IP=$(docker inspect "$MSSQL_CONTAINER" --format "{{(index .NetworkSettings.Networks \"${NETWORK}\").IPAddress}}")
           echo "MSSQL IP on network: $MSSQL_IP"
 
+          # Pull image first so inspect and run don't interleave output
+          docker pull shankarask/nopcommerce-e2e:latest
+
           echo "--- Image volumes ---"
           docker inspect shankarask/nopcommerce-e2e:latest --format '{{json .Config.Volumes}}'
 
