@@ -67,9 +67,21 @@ jobs:
             -Q "RESTORE DATABASE [nopCommerce_db] FROM DISK='/var/opt/mssql/backup/nopcommerce.bak' WITH REPLACE, RECOVERY"
           echo "✓ Database restored"
 
-          echo "Restarting nopCommerce so it picks up the restored database..."
+          echo "Injecting dataSettings.json into nopCommerce container..."
           NOP_CONTAINER=$(docker ps --filter "ancestor=shankarask/nopcommerce-e2e:latest" --format "{{.Names}}" | head -1)
           echo "nopCommerce container: $NOP_CONTAINER"
+          docker exec "$NOP_CONTAINER" mkdir -p /app/App_Data
+          docker exec "$NOP_CONTAINER" sh -c 'cat > /app/App_Data/dataSettings.json << '\''EOF'\''
+{
+  "DataProvider": "sqlserver",
+  "ConnectionString": "Server=nopcommerce_mssql_server,1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Trust Server Certificate=True;",
+  "SQLCommandTimeout": null,
+  "RawDataSettings": {}
+}
+EOF'
+          echo "✓ dataSettings.json written"
+
+          echo "Restarting nopCommerce so it picks up the restored database..."
           docker restart "$NOP_CONTAINER"
           sleep 10
           echo "✓ nopCommerce restarted"
