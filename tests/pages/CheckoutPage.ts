@@ -25,19 +25,13 @@ export class CheckoutPage {
   async advanceThroughAddressSteps(address: BillingAddress): Promise<void> {
     await this._fillBillingIfRequired(address);
 
-    await Promise.all([
-      this.page.waitForResponse(res => res.url().includes('/checkout/') && res.status() === 200, { timeout: 15_000 }).catch(() => {}),
-      this.page.evaluate(() => (window as any).Billing.save()),
-    ]);
-    await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+    await this.page.evaluate(() => (window as any).Billing.save());
+    await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
     const shippingStep = this.page.locator('#checkout-step-shipping');
     if (await shippingStep.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await Promise.all([
-        this.page.waitForResponse(res => res.url().includes('/checkout/') && res.status() === 200, { timeout: 15_000 }).catch(() => {}),
-        this.page.evaluate(() => (window as any).Shipping.save()),
-      ]);
-      await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+      await this.page.evaluate(() => (window as any).Shipping.save());
+      await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
 
     await expect(this.page.locator('.method-list')).toBeVisible({ timeout: 15_000 });

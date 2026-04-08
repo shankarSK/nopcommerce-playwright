@@ -75,17 +75,30 @@ jobs:
               UPDATE Setting SET Value='True'
                 WHERE Name='fixedbyweightbytotalsettings.shippingbyweightbytotalenabled';
 
-              IF NOT EXISTS (SELECT 1 FROM ShippingByWeightByTotalRecord)
-              BEGIN
-                INSERT INTO ShippingByWeightByTotalRecord
-                  (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
-                   PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
-                   Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
-                VALUES
-                  (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,1,NULL),
-                  (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,2,NULL),
-                  (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,3,NULL)
-              END
+              DELETE FROM ShippingByWeightByTotalRecord;
+
+              INSERT INTO ShippingByWeightByTotalRecord
+                (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
+                 PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
+                 Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
+              VALUES
+                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,1,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,2,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,3,NULL);
+            "
+
+          echo "--- Verify shipping config in DB ---"
+          docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "nopCommerce_db_password" -No -d nopCommerce_db \
+            -Q "
+              SELECT Name, Value FROM Setting
+                WHERE Name IN (
+                  'shippingsettings.activeshippingratecomputationmethodsystemnames',
+                  'fixedbyweightbytotalsettings.shippingbyweightbytotalenabled'
+                );
+              SELECT r.Id, r.ShippingMethodId, m.Name, r.WeightFrom, r.WeightTo
+                FROM ShippingByWeightByTotalRecord r
+                JOIN ShippingMethod m ON m.Id=r.ShippingMethodId;
             "
           echo "✓ Shipping configured (UPS removed, FixedByWeightByTotal enabled)"
 
