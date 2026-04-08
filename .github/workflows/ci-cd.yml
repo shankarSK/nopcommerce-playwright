@@ -72,19 +72,11 @@ jobs:
               UPDATE Setting SET Value='Shipping.FixedByWeightByTotal'
                 WHERE Name='shippingsettings.activeshippingratecomputationmethodsystemnames';
 
-              UPDATE Setting SET Value='True'
+              -- Use fixed-rate mode (False): plugin returns a flat rate per shipping method
+              -- without needing any ShippingByWeightByTotalRecord entries.
+              -- Rate defaults to 0 for each method if no rate setting exists.
+              UPDATE Setting SET Value='False'
                 WHERE Name='fixedbyweightbytotalsettings.shippingbyweightbytotalenabled';
-
-              DELETE FROM ShippingByWeightByTotalRecord;
-
-              INSERT INTO ShippingByWeightByTotalRecord
-                (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
-                 PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
-                 Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
-              VALUES
-                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,1,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,2,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,3,NULL);
             "
 
           echo "--- Verify shipping config in DB ---"
@@ -96,11 +88,10 @@ jobs:
                   'shippingsettings.activeshippingratecomputationmethodsystemnames',
                   'fixedbyweightbytotalsettings.shippingbyweightbytotalenabled'
                 );
-              SELECT r.Id, r.ShippingMethodId, m.Name, r.WeightFrom, r.WeightTo
-                FROM ShippingByWeightByTotalRecord r
-                JOIN ShippingMethod m ON m.Id=r.ShippingMethodId;
+              SELECT COUNT(*) AS RateRecordCount FROM ShippingByWeightByTotalRecord;
+              SELECT Id, Name FROM ShippingMethod;
             "
-          echo "✓ Shipping configured (UPS removed, FixedByWeightByTotal enabled)"
+          echo "✓ Shipping configured (fixed-rate mode, $0 for all methods)"
 
       - name: Start nopCommerce
         run: |
