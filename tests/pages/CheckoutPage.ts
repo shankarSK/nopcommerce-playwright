@@ -25,16 +25,22 @@ export class CheckoutPage {
   async advanceThroughAddressSteps(address: BillingAddress): Promise<void> {
     await this._fillBillingIfRequired(address);
 
-    await this.page.evaluate(() => (window as any).Billing.save());
-    await this.page.waitForTimeout(3_000);
+    await Promise.all([
+      this.page.waitForResponse(res => res.url().includes('/checkout/') && res.status() === 200, { timeout: 15_000 }).catch(() => {}),
+      this.page.evaluate(() => (window as any).Billing.save()),
+    ]);
+    await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
 
     const shippingStep = this.page.locator('#checkout-step-shipping');
-    if (await shippingStep.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await this.page.evaluate(() => (window as any).Shipping.save());
-      await this.page.waitForTimeout(3_000);
+    if (await shippingStep.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await Promise.all([
+        this.page.waitForResponse(res => res.url().includes('/checkout/') && res.status() === 200, { timeout: 15_000 }).catch(() => {}),
+        this.page.evaluate(() => (window as any).Shipping.save()),
+      ]);
+      await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
     }
 
-    await expect(this.page.locator('.method-list')).toBeVisible({ timeout: 10_000 });
+    await expect(this.page.locator('.method-list')).toBeVisible({ timeout: 15_000 });
   }
 
   /**
@@ -97,7 +103,7 @@ export class CheckoutPage {
     await this.page.locator('#BillingNewAddress_LastName').fill(address.lastName);
     await this.page.locator('#BillingNewAddress_Email').fill(address.email);
     await this.page.locator('#BillingNewAddress_CountryId').selectOption({ label: 'United States of America' });
-    await this.page.waitForTimeout(1_500); // wait for state dropdown AJAX
+    await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
     await this.page.locator('#BillingNewAddress_StateProvinceId').selectOption({ label: 'New York' });
     await this.page.locator('#BillingNewAddress_City').fill(address.city);
     await this.page.locator('#BillingNewAddress_Address1').fill(address.address1);
