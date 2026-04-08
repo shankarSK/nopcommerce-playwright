@@ -34,7 +34,22 @@ export class CheckoutPage {
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
 
-    await expect(this.page.locator('.method-list')).toBeVisible({ timeout: 15_000 });
+    const methodList = this.page.locator('.method-list');
+    const isVisible = await methodList.isVisible({ timeout: 15_000 }).catch(() => false);
+
+    if (!isVisible) {
+      // Debug: dump the current URL and the checkout step HTML
+      const url = this.page.url();
+      const stepShippingMethod = await this.page.locator('#checkout-step-shipping-method').innerHTML().catch(() => '(not found)');
+      const stepBilling = await this.page.locator('#checkout-step-billing').innerHTML().catch(() => '(not found)');
+      const stepShipping = await this.page.locator('#checkout-step-shipping').innerHTML().catch(() => '(not found)');
+      console.error(`[DEBUG] URL: ${url}`);
+      console.error(`[DEBUG] billing step: ${stepBilling.slice(0, 500)}`);
+      console.error(`[DEBUG] shipping step: ${stepShipping.slice(0, 500)}`);
+      console.error(`[DEBUG] shipping-method step: ${stepShippingMethod.slice(0, 1000)}`);
+    }
+
+    await expect(methodList).toBeVisible({ timeout: 0 });
   }
 
   /**
