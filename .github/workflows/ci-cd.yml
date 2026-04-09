@@ -72,10 +72,7 @@ jobs:
               UPDATE Setting SET Value='Shipping.FixedByWeightByTotal'
                 WHERE Name='shippingsettings.activeshippingratecomputationmethodsystemnames';
 
-              -- Use fixed-rate mode (False): plugin returns a flat rate per shipping method
-              -- without needing any ShippingByWeightByTotalRecord entries.
-              -- Rate defaults to 0 for each method if no rate setting exists.
-              UPDATE Setting SET Value='False'
+              UPDATE Setting SET Value='True'
                 WHERE Name='fixedbyweightbytotalsettings.shippingbyweightbytotalenabled';
             "
 
