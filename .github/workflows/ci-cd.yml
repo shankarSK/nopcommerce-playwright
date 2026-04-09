@@ -180,6 +180,10 @@ jobs:
       - name: Run tests
         run: npm run test
 
+      - name: Dump nopCommerce logs
+        if: always()
+        run: docker logs nopcommerce_web 2>&1 | tail -100 || true
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

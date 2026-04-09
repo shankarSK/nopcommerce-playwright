@@ -25,6 +25,14 @@ export class CheckoutPage {
   async advanceThroughAddressSteps(address: BillingAddress): Promise<void> {
     await this._fillBillingIfRequired(address);
 
+    // Intercept the shipping method AJAX response for diagnostics
+    const shippingMethodResponse: string[] = [];
+    this.page.on('response', async (response) => {
+      if (response.url().includes('OpcShippingMethods') || response.url().includes('shippingmethod')) {
+        try { shippingMethodResponse.push(await response.text()); } catch {}
+      }
+    });
+
     await this.page.evaluate(() => (window as any).Billing.save());
     await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
@@ -34,7 +42,12 @@ export class CheckoutPage {
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
 
-    await expect(this.page.locator('.method-list')).toBeVisible({ timeout: 15_000 });
+    const methodList = this.page.locator('.method-list');
+    const visible = await methodList.isVisible({ timeout: 15_000 }).catch(() => false);
+    if (!visible) {
+      console.error('[DEBUG] Shipping method AJAX responses:', JSON.stringify(shippingMethodResponse));
+    }
+    await expect(methodList).toBeVisible({ timeout: 0 });
   }
 
   /**
