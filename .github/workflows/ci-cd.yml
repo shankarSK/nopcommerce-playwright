@@ -74,6 +74,26 @@ jobs:
 
               UPDATE Setting SET Value='True'
                 WHERE Name='fixedbyweightbytotalsettings.shippingbyweightbytotalenabled';
+
+              -- Rebuild rate records to cover every address combination:
+              -- CountryId=0/StateProvinceId=0 = unset address
+              -- CountryId=237 (US) / StateProvinceId=0 = any US state
+              -- CountryId=237 / StateProvinceId=1828 (NY) = exact test address
+              DELETE FROM ShippingByWeightByTotalRecord;
+              INSERT INTO ShippingByWeightByTotalRecord
+                (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
+                 PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
+                 Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
+              VALUES
+                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,1,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,2,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,3,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,237,0,1,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,237,0,2,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,237,0,3,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,237,1828,1,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,237,1828,2,NULL),
+                (0,9999,0,9999999,0,0,0,0,'',0,0,237,1828,3,NULL);
             "
 
           echo "--- Verify shipping config in DB ---"
@@ -86,9 +106,8 @@ jobs:
                   'fixedbyweightbytotalsettings.shippingbyweightbytotalenabled'
                 );
               SELECT COUNT(*) AS RateRecordCount FROM ShippingByWeightByTotalRecord;
-              SELECT Id, Name FROM ShippingMethod;
             "
-          echo "✓ Shipping configured (fixed-rate mode, $0 for all methods)"
+          echo "✓ Shipping configured ($0 rates for US/NY and any address)"
 
       - name: Start nopCommerce
         run: |
