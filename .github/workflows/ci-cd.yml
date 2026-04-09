@@ -117,46 +117,20 @@ jobs:
               END
             "
 
-          echo "--- Verify shipping config in DB ---"
-          docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
-            -S localhost -U sa -P "nopCommerce_db_password" -No -d nopCommerce_db \
-            -Q "
-              SELECT Name, Value FROM Setting
-                WHERE Name IN (
-                  'shippingsettings.activeshippingratecomputationmethodsystemnames',
-                  'fixedbyweightbytotalsettings.shippingbyweightbytotalenabled'
-                );
-              SELECT COUNT(*) AS RateRecordCount FROM ShippingByWeightByTotalRecord;
-              SELECT Name, Value FROM Setting WHERE Name LIKE '%plugin%installed%' OR Name LIKE '%installedplugin%';
-              SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '%plugin%' OR TABLE_NAME LIKE '%Plugin%';
-            "
-          echo "✓ Shipping configured ($0 rates for US/NY and any address)"
+          echo "✓ Shipping configured"
 
       - name: Start nopCommerce
         run: |
           MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
-          echo "MSSQL container: $MSSQL_CONTAINER"
-
-          # Get the GitHub Actions network (exclude default bridge/host/none)
           NETWORK=$(docker network ls --format "{{.Name}}" | grep -Ev '^(bridge|host|none)$' | head -1)
-          echo "Docker network: $NETWORK"
-
-          # Get MSSQL IP on this specific network
           MSSQL_IP=$(docker inspect "$MSSQL_CONTAINER" --format "{{(index .NetworkSettings.Networks \"${NETWORK}\").IPAddress}}")
-          echo "MSSQL IP on network: $MSSQL_IP"
+          echo "Network: $NETWORK | MSSQL IP: $MSSQL_IP"
 
-          # Pull image first so inspect and run don't interleave output
           docker pull shankarask/nopcommerce-e2e:latest
 
-          echo "--- Image volumes ---"
-          docker inspect shankarask/nopcommerce-e2e:latest --format '{{json .Config.Volumes}}'
-
-          # nopCommerce 4.80 uses App_Data/appsettings.json (not dataSettings.json).
-          # Write the full appsettings.json with the real connection string before dotnet starts.
           CONN_STR="Server=${MSSQL_IP},1433;Database=nopCommerce_db;Persist Security Info=False;User ID=sa;Password=nopCommerce_db_password;Encrypt=False;"
-          AS_JSON=$(printf '{"ConnectionStrings":{"ConnectionString":"%s","DataProvider":"sqlserver","SQLCommandTimeout":null,"WithNoLock":false,"Collation":"","CharacterSet":""},"CacheConfig":{"DefaultCacheTime":60,"LinqDisableQueryCache":false},"CommonConfig":{"DisplayFullErrorStack":true,"UserAgentStringsPath":"~/App_Data/browscap.xml","CrawlerOnlyUserAgentStringsPath":"~/App_Data/browscap.crawlersonly.xml","CrawlerOnlyAdditionalUserAgentStringsPath":"~/App_Data/additional.crawlers.xml","UseSessionStateTempDataProvider":false,"ScheduleTaskRunTimeout":null,"StaticFilesCacheControl":"public,max-age=31536000","ServeUnknownFileTypes":false,"UseAutofac":true,"PermitLimit":0,"QueueCount":0,"RejectionStatusCode":503},"DistributedCacheConfig":{"DistributedCacheType":"redissynchronizedmemory","Enabled":false,"ConnectionString":"127.0.0.1:6379,ssl=False","SchemaName":"dbo","TableName":"DistributedCache","InstanceName":"nopCommerce","PublishIntervalMs":500},"HostingConfig":{"UseProxy":false,"ForwardedProtoHeaderName":"","ForwardedForHeaderName":"","KnownProxies":"","KnownNetworks":""},"InstallationConfig":{"DisableSampleData":false,"DisabledPlugins":"Misc.AzureBlob,Misc.CloudflareImages","InstallRegionalResources":true},"PluginConfig":{"UseUnsafeLoadAssembly":true},"WebOptimizer":{"EnableJavaScriptBundling":true,"EnableCssBundling":true,"JavaScriptBundleSuffix":".scripts","CssBundleSuffix":".styles","EnableCaching":true,"EnableMemoryCache":true,"EnableDiskCache":true,"CacheDirectory":"/app/wwwroot/bundles","EnableTagHelperBundling":false,"CdnUrl":"","AllowEmptyBundle":true,"HttpsCompression":2,"MemoryCacheTimeToLive":"01:00:00"}}' "$CONN_STR")
+          AS_JSON=$(printf '{"ConnectionStrings":{"ConnectionString":"%s","DataProvider":"sqlserver","SQLCommandTimeout":null,"WithNoLock":false,"Collation":"","CharacterSet":""},"CacheConfig":{"DefaultCacheTime":60,"LinqDisableQueryCache":false},"CommonConfig":{"DisplayFullErrorStack":false,"UserAgentStringsPath":"~/App_Data/browscap.xml","CrawlerOnlyUserAgentStringsPath":"~/App_Data/browscap.crawlersonly.xml","CrawlerOnlyAdditionalUserAgentStringsPath":"~/App_Data/additional.crawlers.xml","UseSessionStateTempDataProvider":false,"ScheduleTaskRunTimeout":null,"StaticFilesCacheControl":"public,max-age=31536000","ServeUnknownFileTypes":false,"UseAutofac":true,"PermitLimit":0,"QueueCount":0,"RejectionStatusCode":503},"DistributedCacheConfig":{"DistributedCacheType":"redissynchronizedmemory","Enabled":false,"ConnectionString":"127.0.0.1:6379,ssl=False","SchemaName":"dbo","TableName":"DistributedCache","InstanceName":"nopCommerce","PublishIntervalMs":500},"HostingConfig":{"UseProxy":false,"ForwardedProtoHeaderName":"","ForwardedForHeaderName":"","KnownProxies":"","KnownNetworks":""},"InstallationConfig":{"DisableSampleData":false,"DisabledPlugins":"Misc.AzureBlob,Misc.CloudflareImages","InstallRegionalResources":true},"PluginConfig":{"UseUnsafeLoadAssembly":true},"WebOptimizer":{"EnableJavaScriptBundling":true,"EnableCssBundling":true,"JavaScriptBundleSuffix":".scripts","CssBundleSuffix":".styles","EnableCaching":true,"EnableMemoryCache":true,"EnableDiskCache":true,"CacheDirectory":"/app/wwwroot/bundles","EnableTagHelperBundling":false,"CdnUrl":"","AllowEmptyBundle":true,"HttpsCompression":2,"MemoryCacheTimeToLive":"01:00:00"}}' "$CONN_STR")
           AS_B64=$(printf '%s' "$AS_JSON" | base64 -w 0)
-          echo "Connection string targets: $MSSQL_IP:1433"
 
           PLUGINS_JSON='{"InstalledPluginNames":["Obsolete field, using only for compatibility"],"InstalledPlugins":[{"SystemName":"DiscountRules.CustomerRoles"},{"SystemName":"ExchangeRate.EcbExchange"},{"SystemName":"Misc.Forums"},{"SystemName":"Misc.News"},{"SystemName":"Misc.Polls"},{"SystemName":"MultiFactorAuth.GoogleAuthenticator"},{"SystemName":"Payments.CheckMoneyOrder"},{"SystemName":"Payments.Manual"},{"SystemName":"Pickup.PickupInStore"},{"SystemName":"Search.Lucene"},{"SystemName":"Shipping.FixedByWeightByTotal"},{"SystemName":"Tax.FixedOrByCountryStateZip"},{"SystemName":"Widgets.GoogleAnalytics"}],"PluginNamesToUninstall":[],"PluginNamesToDelete":[],"PluginNamesToInstall":[]}'
           PLUGINS_B64=$(printf '%s' "$PLUGINS_JSON" | base64 -w 0)
@@ -169,37 +143,9 @@ jobs:
             -e "PLUGINS_B64=$PLUGINS_B64" \
             --entrypoint /bin/sh \
             shankarask/nopcommerce-e2e:latest \
-            -c 'mkdir -p /app/App_Data && echo "$AS_B64" | base64 -d > /app/App_Data/appsettings.json && echo "$PLUGINS_B64" | base64 -d > /app/App_Data/plugins.json && echo "=== config written ===" && exec dotnet /app/Nop.Web.dll'
-
-          echo "Waiting 15s for nopCommerce to initialise..."
-          sleep 15
-
-          echo "--- Container status ---"
-          docker ps --filter "name=nopcommerce_web"
-
-          echo "--- Container logs ---"
-          docker logs nopcommerce_web --tail 40
-
-          echo "--- App_Data contents ---"
-          docker exec nopcommerce_web ls /app/App_Data/
-
-          echo "--- plugins.json (installed plugins) ---"
-          docker exec nopcommerce_web cat /app/App_Data/plugins.json 2>/dev/null || echo "(not found)"
-
-          echo "--- Plugins directory ---"
-          docker exec nopcommerce_web ls /app/Plugins/ 2>/dev/null || echo "(not found)"
+            -c 'mkdir -p /app/App_Data && echo "$AS_B64" | base64 -d > /app/App_Data/appsettings.json && echo "$PLUGINS_B64" | base64 -d > /app/App_Data/plugins.json && exec dotnet /app/Nop.Web.dll'
 
           echo "✓ nopCommerce started"
-
-          echo "--- DB records after nopCommerce startup ---"
-          MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
-          docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
-            -S localhost -U sa -P "nopCommerce_db_password" -No -d nopCommerce_db \
-            -Q "
-              SELECT COUNT(*) AS RateRecordCount FROM ShippingByWeightByTotalRecord;
-              SELECT Name, Value FROM Setting WHERE Name LIKE 'fixedbyweightbytotal%';
-              SELECT Id, Name FROM Store;
-            "
 
       - name: Wait for nopCommerce to be ready
         run: |
@@ -222,10 +168,6 @@ jobs:
 
       - name: Run tests
         run: npm run test
-
-      - name: Dump nopCommerce logs
-        if: always()
-        run: docker logs nopcommerce_web 2>&1 | tail -100 || true
 
       - name: Upload test results
         if: always()
@@ -255,58 +197,4 @@ jobs:
       - name: Check TypeScript
         run: npx tsc --noEmit
 
-  build:
-    runs-on: ubuntu-latest
-    name: Build
-    needs: [test, lint]
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build application
-        run: npm run build || echo "No build script defined"
-
-  deploy:
-    runs-on: ubuntu-latest
-    name: Build and Push Docker Image
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ secrets.DOCKER_USERNAME }}/nopcommerce-playwright
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
