@@ -127,6 +127,8 @@ jobs:
                   'fixedbyweightbytotalsettings.shippingbyweightbytotalenabled'
                 );
               SELECT COUNT(*) AS RateRecordCount FROM ShippingByWeightByTotalRecord;
+              SELECT Name, Value FROM Setting WHERE Name LIKE '%plugin%installed%' OR Name LIKE '%installedplugin%';
+              SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '%plugin%' OR TABLE_NAME LIKE '%Plugin%';
             "
           echo "✓ Shipping configured ($0 rates for US/NY and any address)"
 
@@ -174,8 +176,14 @@ jobs:
           echo "--- Container logs ---"
           docker logs nopcommerce_web --tail 40
 
-          echo "--- appsettings.json ConnectionString in container ---"
-          docker exec nopcommerce_web cat /app/App_Data/appsettings.json 2>&1 | grep -o '"ConnectionString":"[^"]*"' || echo "NOT FOUND"
+          echo "--- App_Data contents ---"
+          docker exec nopcommerce_web ls /app/App_Data/
+
+          echo "--- plugins.json (installed plugins) ---"
+          docker exec nopcommerce_web cat /app/App_Data/plugins.json 2>/dev/null || echo "(not found)"
+
+          echo "--- Plugins directory ---"
+          docker exec nopcommerce_web ls /app/Plugins/ 2>/dev/null || echo "(not found)"
 
           echo "✓ nopCommerce started"
 
