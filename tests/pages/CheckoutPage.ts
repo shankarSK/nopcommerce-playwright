@@ -25,11 +25,11 @@ export class CheckoutPage {
   async advanceThroughAddressSteps(address: BillingAddress): Promise<void> {
     await this._fillBillingIfRequired(address);
 
-    // Intercept the shipping method AJAX response for diagnostics
-    const shippingMethodResponse: string[] = [];
+    // Intercept OpcSaveBilling — it returns shipping method HTML inline
+    let billingResponse = '';
     this.page.on('response', async (response) => {
-      if (response.url().includes('OpcShippingMethods') || response.url().includes('shippingmethod')) {
-        try { shippingMethodResponse.push(await response.text()); } catch {}
+      if (response.url().includes('OpcSaveBilling') || response.url().includes('OpcSaveShipping')) {
+        try { billingResponse += '\n---\n' + response.url() + '\n' + (await response.text()).slice(0, 2000); } catch {}
       }
     });
 
@@ -45,7 +45,7 @@ export class CheckoutPage {
     const methodList = this.page.locator('.method-list');
     const visible = await methodList.isVisible({ timeout: 15_000 }).catch(() => false);
     if (!visible) {
-      console.error('[DEBUG] Shipping method AJAX responses:', JSON.stringify(shippingMethodResponse));
+      console.error('[DEBUG] OpcSaveBilling/OpcSaveShipping response:', billingResponse);
     }
     await expect(methodList).toBeVisible({ timeout: 0 });
   }
