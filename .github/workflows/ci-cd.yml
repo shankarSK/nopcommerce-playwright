@@ -158,6 +158,16 @@ jobs:
 
           echo "✓ nopCommerce started"
 
+          echo "--- DB records after nopCommerce startup ---"
+          MSSQL_CONTAINER=$(docker ps --filter "ancestor=mcr.microsoft.com/mssql/server:2019-latest" --format "{{.Names}}" | head -1)
+          docker exec "$MSSQL_CONTAINER" /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "nopCommerce_db_password" -No -d nopCommerce_db \
+            -Q "
+              SELECT COUNT(*) AS RateRecordCount FROM ShippingByWeightByTotalRecord;
+              SELECT Name, Value FROM Setting WHERE Name LIKE 'fixedbyweightbytotal%';
+              SELECT Id, Name FROM Store;
+            "
+
       - name: Wait for nopCommerce to be ready
         run: |
           echo "Waiting for nopCommerce to be ready..."

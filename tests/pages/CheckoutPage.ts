@@ -25,14 +25,6 @@ export class CheckoutPage {
   async advanceThroughAddressSteps(address: BillingAddress): Promise<void> {
     await this._fillBillingIfRequired(address);
 
-    // Intercept OpcSaveBilling — it returns shipping method HTML inline
-    let billingResponse = '';
-    this.page.on('response', async (response) => {
-      if (response.url().includes('OpcSaveBilling') || response.url().includes('OpcSaveShipping')) {
-        try { billingResponse += '\n---\n' + response.url() + '\n' + (await response.text()).slice(0, 2000); } catch {}
-      }
-    });
-
     await this.page.evaluate(() => (window as any).Billing.save());
     await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
@@ -42,12 +34,7 @@ export class CheckoutPage {
       await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     }
 
-    const methodList = this.page.locator('.method-list');
-    const visible = await methodList.isVisible({ timeout: 15_000 }).catch(() => false);
-    if (!visible) {
-      console.error('[DEBUG] OpcSaveBilling/OpcSaveShipping response:', billingResponse);
-    }
-    await expect(methodList).toBeVisible({ timeout: 0 });
+    await expect(this.page.locator('.method-list')).toBeVisible({ timeout: 15_000 });
   }
 
   /**
