@@ -158,7 +158,7 @@ jobs:
           AS_B64=$(printf '%s' "$AS_JSON" | base64 -w 0)
           echo "Connection string targets: $MSSQL_IP:1433"
 
-          PLUGINS_JSON='{"InstalledPluginNames":["Obsolete field, using only for compatibility"],"InstalledPlugins":["DiscountRules.CustomerRoles","ExchangeRate.EcbExchange","Misc.Forums","Misc.News","Misc.Polls","MultiFactorAuth.GoogleAuthenticator","Payments.CheckMoneyOrder","Payments.Manual","Pickup.PickupInStore","Search.Lucene","Shipping.FixedByWeightByTotal","Tax.FixedOrByCountryStateZip","Widgets.GoogleAnalytics"],"PluginNamesToUninstall":[],"PluginNamesToDelete":[],"PluginNamesToInstall":[]}'
+          PLUGINS_JSON='{"InstalledPluginNames":["Obsolete field, using only for compatibility"],"InstalledPlugins":[{"SystemName":"DiscountRules.CustomerRoles"},{"SystemName":"ExchangeRate.EcbExchange"},{"SystemName":"Misc.Forums"},{"SystemName":"Misc.News"},{"SystemName":"Misc.Polls"},{"SystemName":"MultiFactorAuth.GoogleAuthenticator"},{"SystemName":"Payments.CheckMoneyOrder"},{"SystemName":"Payments.Manual"},{"SystemName":"Pickup.PickupInStore"},{"SystemName":"Search.Lucene"},{"SystemName":"Shipping.FixedByWeightByTotal"},{"SystemName":"Tax.FixedOrByCountryStateZip"},{"SystemName":"Widgets.GoogleAnalytics"}],"PluginNamesToUninstall":[],"PluginNamesToDelete":[],"PluginNamesToInstall":[]}'
           PLUGINS_B64=$(printf '%s' "$PLUGINS_JSON" | base64 -w 0)
 
           docker run -d \
