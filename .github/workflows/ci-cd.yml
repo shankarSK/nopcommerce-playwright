@@ -79,21 +79,42 @@ jobs:
               -- CountryId=0/StateProvinceId=0 = unset address
               -- CountryId=237 (US) / StateProvinceId=0 = any US state
               -- CountryId=237 / StateProvinceId=1828 (NY) = exact test address
+              -- Brute-force: insert $0 rates for every combination of
+              -- StoreId (0=any, 1=actual), WarehouseId (0=any, 1=NY, 2=LA),
+              -- CountryId (0=any, 237=US), StateProvinceId (0=any, 1828=NY)
+              -- across all 3 shipping methods. Weight/subtotal range covers everything.
               DELETE FROM ShippingByWeightByTotalRecord;
-              INSERT INTO ShippingByWeightByTotalRecord
-                (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
-                 PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
-                 Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
-              VALUES
-                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,1,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,2,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,0,0,3,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,237,0,1,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,237,0,2,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,237,0,3,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,237,1828,1,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,237,1828,2,NULL),
-                (0,9999,0,9999999,0,0,0,0,'',0,0,237,1828,3,NULL);
+              DECLARE @m INT; SET @m=1;
+              WHILE @m<=3 BEGIN
+                DECLARE @s INT; SET @s=0;
+                WHILE @s<=1 BEGIN
+                  DECLARE @w INT; SET @w=0;
+                  WHILE @w<=2 BEGIN
+                    DECLARE @c INT; SET @c=0;
+                    WHILE @c<=1 BEGIN
+                      DECLARE @sp INT; SET @sp=0;
+                      WHILE @sp<=1 BEGIN
+                        INSERT INTO ShippingByWeightByTotalRecord
+                          (WeightFrom,WeightTo,OrderSubtotalFrom,OrderSubtotalTo,AdditionalFixedCost,
+                           PercentageRateOfSubtotal,RatePerWeightUnit,LowerWeightLimit,
+                           Zip,StoreId,WarehouseId,CountryId,StateProvinceId,ShippingMethodId,TransitDays)
+                        VALUES
+                          (0,99999,0,9999999,0,0,0,0,'',
+                           CASE @s WHEN 0 THEN 0 ELSE 1 END,
+                           CASE @w WHEN 0 THEN 0 WHEN 1 THEN 1 ELSE 2 END,
+                           CASE @c WHEN 0 THEN 0 ELSE 237 END,
+                           CASE @sp WHEN 0 THEN 0 ELSE 1828 END,
+                           @m,NULL);
+                        SET @sp=@sp+1;
+                      END
+                      SET @c=@c+1;
+                    END
+                    SET @w=@w+1;
+                  END
+                  SET @s=@s+1;
+                END
+                SET @m=@m+1;
+              END
             "
 
           echo "--- Verify shipping config in DB ---"
